@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Story Builder — Dev Test</title>
+  <style>
+    body { font-family: monospace; max-width: 700px; margin: 40px auto; padding: 20px; background: #f5f5f5; }
+    h2 { margin-bottom: 8px; }
+    .screen { display: none; background: white; padding: 24px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #ddd; }
+    .screen.active { display: block; }
+    input, textarea { width: 100%; padding: 8px; margin: 6px 0 12px; font-family: monospace; font-size: 14px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+    button { padding: 10px 20px; font-family: monospace; font-size: 14px; cursor: pointer; border-radius: 4px; border: 1px solid #333; background: #fff; margin-right: 8px; margin-bottom: 4px; }
+    button.primary { background: #333; color: #fff; }
+    button:disabled { opacity: 0.4; cursor: default; }
+    canvas { border: 2px solid #333; border-radius: 4px; cursor: crosshair; touch-action: none; display: block; }
+    .canvas-tools { margin: 8px 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .status { color: #666; font-size: 13px; margin: 8px 0; min-height: 20px; }
+    .status.error { color: #c00; }
+    video { width: 100%; border-radius: 4px; margin: 12px 0; }
+    img.styled { width: 200px; border-radius: 4px; margin: 8px 0; display: block; border: 1px solid #ddd; }
+    .scene-card { border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin: 8px 0; }
+    #show-id-display { font-size: 11px; color: #999; margin-top: 8px; }
+    .loader { display: inline-block; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: #333; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .hint-box { background: #fffbe6; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; font-size: 14px; border-left: 3px solid #f4d03f; }
+    @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-in { animation: fadeSlideIn 0.6s ease forwards; opacity: 0; }
+    .story-card { display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:1px solid #e0e0e0;border-radius:6px;margin-bottom:8px;background:#fafafa;font-size:13px; }
+    .story-card .card-actions { display:flex;gap:6px;flex-shrink:0; }
+    .story-card button { padding:5px 10px;font-size:12px; }
+    .story-card .btn-danger { color:#c00;border-color:#fcc; }
+    .rename-input { width:100%;padding:4px 8px;font-size:13px;border:1px solid #aaa;border-radius:4px;margin-top:4px;box-sizing:border-box; }
+  </style>
+</head>
+<body>
+
+<!-- SCREEN 1: Question flow (story name + character name) -->
+<div class="screen active" id="screen-setup">
+  <div id="question-box" style="text-align:center;padding:12px 0;">
+    <div id="question-text" style="font-size:1.3rem;font-weight:bold;margin-bottom:20px;min-height:2rem;"></div>
+    <div style="display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:12px;">
+      <input id="question-input" type="text" placeholder="Type your answer..." style="max-width:320px;font-size:1rem;" onkeydown="if(event.key==='Enter')answerQuestion()" />
+      <button id="btn-mic" onclick="toggleQuestionVoice()" title="Use voice">🎤</button>
+    </div>
+    <div id="voice-q-indicator" style="font-size:12px;color:#c00;min-height:16px;margin-bottom:8px;"></div>
+    <button class="primary" onclick="answerQuestion()">Next →</button>
+  </div>
+  <!-- Past stories -->
+  <div id="past-stories-section" style="margin-top:24px;display:none;">
+    <hr style="border:none;border-top:1px solid #eee;margin-bottom:16px;">
+    <h4 style="margin:0 0 10px;font-size:14px;color:#555;">📚 Your Past Stories</h4>
+    <div id="past-stories-list"></div>
+  </div>
+</div>
+
+<!-- SCREEN 2: Draw a character -->
+<div class="screen" id="screen-draw">
+  <h2 id="draw-heading">🎨 Draw a Character</h2>
+  <div class="canvas-tools">
+    <label>Brush: <input type="range" id="brush-size" min="2" max="30" value="8" style="width:100px;margin:0 4px;"></label>
+    <button onclick="clearCanvas()">Clear</button>
+  </div>
+  <canvas id="draw-canvas" width="620" height="340"></canvas>
+  <br><br>
+  <button class="primary" onclick="submitCharacter()" id="btn-add-char">Add to Story →</button>
+  <button onclick="skipCharacter()">Skip</button>
+  <div class="status" id="char-status"></div>
+  <img class="styled" id="styled-img" style="display:none" />
+  <div id="char-description" style="font-size:13px;color:#555;margin:4px 0;font-style:italic;"></div>
+</div>
+
+<!-- SCREEN 2.5: Character trait questions -->
+<div class="screen" id="screen-charqs">
+  <div style="text-align:center;padding:8px 0 4px;">
+    <div style="font-size:2rem;margin-bottom:6px;">🌟</div>
+    <p style="color:#888;font-size:13px;margin-bottom:4px;">Let's get to know your character!</p>
+    <p style="color:#bbb;font-size:11px;margin-bottom:16px;">✨ Coloring in your drawing while you answer...</p>
+  </div>
+  <div style="text-align:center;padding:12px 0;">
+    <div id="charqs-text" style="font-size:1.3rem;font-weight:bold;margin-bottom:20px;min-height:2rem;"></div>
+    <div style="display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:12px;">
+      <input id="charqs-input" type="text" placeholder="Type your answer..." style="max-width:320px;font-size:1rem;" onkeydown="if(event.key==='Enter')answerCharQ()" />
+      <button id="btn-charqs-mic" onclick="toggleCharQVoice()" title="Use voice">🎤</button>
+    </div>
+    <div id="voice-charqs-indicator" style="font-size:12px;color:#c00;min-height:16px;margin-bottom:8px;"></div>
+    <button class="primary" onclick="answerCharQ()">Next →</button>
+    <button onclick="skipCharQs()" style="font-size:12px;color:#aaa;border-color:#ddd;margin-left:6px;">Skip</button>
+  </div>
+</div>
+
+<!-- Parental approval overlay -->
+<div id="approval-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;display:none;align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:12px;padding:32px;max-width:400px;width:90%;text-align:center;">
+    <div style="font-size:2rem;margin-bottom:12px;">🔒</div>
+    <h3 style="margin-bottom:8px;">Parent Check</h3>
+    <p id="approval-reason" style="color:#555;font-size:14px;margin-bottom:20px;"></p>
+    <p style="font-size:13px;color:#888;margin-bottom:20px;">A parent or guardian needs to approve this before the story continues.</p>
+    <button class="primary" onclick="approveContent()" style="margin-right:8px;">✓ Approve</button>
+    <button onclick="denyContent()">✗ Try Again</button>
+  </div>
+</div>
+
+<!-- SCREEN 3: Scene loop -->
+<div class="screen" id="screen-scene">
+  <h2 id="scene-heading">Scene 1 of 3</h2>
+
+  <!-- Challenge/encounter box -->
+  <div id="challenge-box" style="display:none;background:linear-gradient(135deg,#fff9e6,#fff0cc);border:2px solid #f4d03f;border-radius:10px;padding:16px 20px;margin-bottom:16px;">
+    <div style="font-size:11px;font-weight:bold;color:#b8860b;letter-spacing:1px;margin-bottom:8px;">⚡ YOUR CHALLENGE</div>
+    <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+      <img id="challenge-image" style="display:none;width:140px;height:140px;object-fit:cover;border-radius:8px;border:2px solid #f4d03f;flex-shrink:0;" />
+      <div id="challenge-text" style="font-size:1.05rem;line-height:1.55;color:#333;flex:1;min-width:180px;"></div>
+    </div>
+  </div>
+  <!-- Loading challenge state -->
+  <div id="challenge-loading" style="display:none;text-align:center;padding:20px 0;color:#888;font-size:14px;">
+    <span class="loader"></span>Crafting your adventure...
+  </div>
+
+  <label id="solution-label" style="display:none;">💡 What does your character do?</label>
+  <textarea id="scene-input" rows="3" placeholder="e.g. I cast a shrinking spell on the tree!" style="display:none;"></textarea>
+
+  <div id="scene-controls" style="display:none;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+    <button class="primary" onclick="generateScene()" id="btn-generate">Generate Scene 1</button>
+    <button onclick="toggleVoice()" id="btn-voice">🎤 Voice</button>
+    <span id="voice-indicator" style="font-size:12px;color:#c00;"></span>
+  </div>
+
+  <div class="status" id="scene-status"></div>
+
+  <!-- Voice moment prompt (shown before Veo starts) -->
+  <div id="voice-moment" style="display:none;text-align:center;padding:20px;border:2px dashed #f4d03f;border-radius:8px;margin:12px 0;background:#fffbe6;">
+    <div id="voice-moment-text" style="font-size:1.1rem;font-weight:bold;margin-bottom:16px;"></div>
+    <div style="display:flex;gap:12px;justify-content:center;align-items:center;flex-wrap:wrap;">
+      <button id="btn-voice-moment" onclick="startVoiceMoment()" style="font-size:1.4rem;padding:14px 20px;border-radius:50%;width:60px;height:60px;">🎤</button>
+      <button onclick="skipVoiceMoment()" style="font-size:13px;color:#888;border-color:#ccc;">Skip</button>
+    </div>
+    <div id="voice-moment-status" style="font-size:12px;color:#888;margin-top:8px;min-height:16px;"></div>
+    <div id="voice-moment-response" style="font-size:13px;color:#333;margin-top:6px;font-style:italic;"></div>
+  </div>
+
+  <!-- Draw while Veo loads -->
+  <div id="loading-draw-area" style="display:none;border:1px dashed #ccc;padding:16px;border-radius:6px;margin:12px 0;">
+    <p style="font-size:13px;color:#555;margin-bottom:10px;">⏳ Generating your scene (~1 min)... <strong>Draw something to add to the next scene!</strong></p>
+    <label>Name this character/object</label>
+    <input id="loading-char-name" type="text" placeholder="e.g. Magic Mushroom" />
+    <div class="canvas-tools">
+      <label>Brush: <input type="range" id="brush-size-2" min="2" max="30" value="8" style="width:100px;margin:0 4px;"></label>
+      <button onclick="clearCanvas2()">Clear</button>
+    </div>
+    <canvas id="draw-canvas-2" width="580" height="260"></canvas>
+    <br><br>
+    <button onclick="submitLoadingCharacter()" id="btn-add-loading">Add to Next Scene</button>
+    <div class="status" id="loading-char-status"></div>
+    <img class="styled" id="styled-img-2" style="display:none" />
+  </div>
+
+  <!-- Scene result -->
+  <div id="scene-result" style="display:none;">
+    <h4 id="scene-title" style="margin:8px 0;"></h4>
+    <video id="scene-video" controls></video>
+    <audio id="scene-audio" controls style="width:100%;margin-top:4px;"></audio>
+    <div id="scene-next-hint" style="font-size:13px;color:#555;margin:4px 0;font-style:italic;"></div>
+  </div>
+</div>
+
+<!-- SCREEN 3.5: Name your story -->
+<div class="screen" id="screen-name-story">
+  <div style="text-align:center;padding:32px 0 20px;">
+    <div style="font-size:3.5rem;margin-bottom:12px;">🎬</div>
+    <h2 style="font-size:1.6rem;margin-bottom:8px;">You did it!</h2>
+    <p style="color:#666;font-size:15px;margin-bottom:28px;">Your story is complete. What would you like to call it?</p>
+    <div style="display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:12px;">
+      <input id="story-name-input" type="text" placeholder="e.g. The Great Blobby Adventure" style="max-width:340px;font-size:1.1rem;" onkeydown="if(event.key==='Enter')submitStoryName()" />
+      <button id="btn-name-mic" onclick="toggleNameVoice()" title="Use voice">🎤</button>
+    </div>
+    <div id="voice-name-indicator" style="font-size:12px;color:#c00;min-height:16px;margin-bottom:12px;"></div>
+    <button class="primary" onclick="submitStoryName()" style="font-size:1rem;padding:12px 28px;">See My Story ✨</button>
+  </div>
+</div>
+
+<!-- SCREEN 4: Finale -->
+<div class="screen" id="screen-finale">
+  <div id="finale-title" style="text-align:center;padding:16px 0 8px;"></div>
+  <div id="finale-characters" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:20px;"></div>
+  <div id="all-scenes"></div>
+  <div style="text-align:center;margin-top:24px;">
+    <button class="primary" onclick="location.reload()">✨ Make Another Story</button>
+  </div>
+</div>
+
+<!-- SCREEN 5: Revisit a past story -->
+<div class="screen" id="screen-revisit">
+  <div style="margin-bottom:12px;">
+    <button onclick="show('screen-setup')" style="font-size:12px;color:#888;border-color:#ccc;">← Back to Stories</button>
+  </div>
+  <div id="revisit-title" style="text-align:center;padding:8px 0 16px;"></div>
+  <div id="revisit-characters" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:20px;"></div>
+  <div id="revisit-scenes"></div>
+  <div style="text-align:center;margin-top:24px;">
+    <button class="primary" onclick="location.reload()">✨ Make a New Story</button>
+  </div>
+</div>
+
+<script>
+  // ── State ───────────────────────────────────────────────────────────────
+  let showId = null;
+  let currentScene = 1;
+  const TOTAL_SCENES = 3;
+  const scenes = [];
+  const characters = [];
+  let characterTraits = {};
+  let charQStep = 0;
+  let charQVoiceRec = null;
+  let currentChallenge = null;
+  let pendingClosingLine = null;
+  let nameVoiceRec = null;
+
+  // ── Question flow (story name → character name) ──────────────────────────
+  const QUESTIONS = [
+    { key: 'charName', text: "What's your main character's name?" },
+  ];
+  let qStep = 0;
+  let answers = {};
+  let voiceRecognition = null;
+
+  function startQuestions() {
+    qStep = 0;
+    askQuestion();
+  }
+
+  function askQuestion() {
+    const q = QUESTIONS[qStep];
+    document.getElementById('question-text').textContent = q.text;
+    document.getElementById('question-input').value = '';
+    document.getElementById('question-input').focus();
+    document.getElementById('voice-q-indicator').textContent = '';
+    document.getElementById('btn-mic').textContent = '🎤';
+    narrate(q.text);
+  }
+
+  function answerQuestion() {
+    const val = document.getElementById('question-input').value.trim();
+    if (!val) return;
+    stopQuestionVoice();
+    answers[QUESTIONS[qStep].key] = val;
+    qStep++;
+    if (qStep < QUESTIONS.length) {
+      askQuestion();
+    } else {
+      showId = crypto.randomUUID();
+      document.getElementById('draw-heading').textContent = `🎨 Draw ${answers.charName}`;
+      narrate(`Wonderful! Now draw ${answers.charName} on the canvas below.`);
+      show('screen-draw');
+    }
+  }
+
+  function toggleQuestionVoice() {
+    if (voiceRecognition) { stopQuestionVoice(); return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return alert('Speech recognition not supported. Use Chrome.');
+    voiceRecognition = new SR();
+    voiceRecognition.continuous = false;
+    voiceRecognition.interimResults = true;
+    voiceRecognition.onresult = (e) => {
+      document.getElementById('question-input').value =
+        Array.from(e.results).map(r => r[0].transcript).join('');
+    };
+    voiceRecognition.onend = () => {
+      stopQuestionVoice();
+      answerQuestion();
+    };
+    voiceRecognition.onerror = () => stopQuestionVoice();
+    voiceRecognition.start();
+    document.getElementById('btn-mic').textContent = '⏹';
+    document.getElementById('voice-q-indicator').textContent = '● listening...';
+  }
+
+  function stopQuestionVoice() {
+    voiceRecognition?.stop(); voiceRecognition = null;
+    document.getElementById('btn-mic').textContent = '🎤';
+    document.getElementById('voice-q-indicator').textContent = '';
+  }
+
+  // Start question flow after page fully loads so narrate() is ready
+  window.addEventListener('load', () => { startQuestions(); loadPastStories(); });
+
+  // ── Character trait questions ────────────────────────────────────────────
+  function charQText(template, name) {
+    return template.replace('{name}', name || 'your character');
+  }
+
+  const CHAR_Q_TEMPLATES = [
+    { key: 'loves',  text: 'What does {name} love to do most?' },
+    { key: 'fears',  text: 'What is {name} a little bit afraid of?' },
+  ];
+
+  function startCharQuestions(charName) {
+    charQStep = 0;
+    characterTraits = {};
+    show('screen-charqs');
+    askCharQ(charName);
+  }
+
+  function askCharQ(charName) {
+    const q = CHAR_Q_TEMPLATES[charQStep];
+    const text = charQText(q.text, charName || answers.charName);
+    document.getElementById('charqs-text').textContent = text;
+    document.getElementById('charqs-input').value = '';
+    document.getElementById('charqs-input').focus();
+    document.getElementById('voice-charqs-indicator').textContent = '';
+    document.getElementById('btn-charqs-mic').textContent = '🎤';
+    narrate(text);
+  }
+
+  function answerCharQ() {
+    const val = document.getElementById('charqs-input').value.trim();
+    if (!val) return;
+    stopCharQVoice();
+    characterTraits[CHAR_Q_TEMPLATES[charQStep].key] = val;
+    charQStep++;
+    if (charQStep < CHAR_Q_TEMPLATES.length) {
+      askCharQ();
+    } else {
+      narrate(`Wonderful! Your adventure is about to begin...`);
+      show('screen-scene');
+      loadFirstChallenge();
+    }
+  }
+
+  function skipCharQs() {
+    stopCharQVoice();
+    show('screen-scene');
+    loadFirstChallenge();
+  }
+
+  async function loadFirstChallenge() {
+    showChallengeLoading(true);
+    try {
+      const res = await fetch('/api/generate-challenge', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ show_id: showId, scene_number: 1, story_name: answers.storyName, character_traits: characterTraits })
+      });
+      const data = await res.json();
+      displayChallenge(data);
+    } catch (e) {
+      showChallengeLoading(false);
+      revealSolutionInput();
+    }
+  }
+
+  function displayChallenge(challenge) {
+    showChallengeLoading(false);
+    currentChallenge = challenge;
+    document.getElementById('challenge-text').textContent = challenge.challenge_text;
+    const img = document.getElementById('challenge-image');
+    if (challenge.challenge_image_url) {
+      img.src = challenge.challenge_image_url;
+      img.style.display = 'block';
+    } else {
+      img.style.display = 'none';
+    }
+    document.getElementById('challenge-box').style.display = 'block';
+    narrate(challenge.challenge_text);
+    revealSolutionInput();
+  }
+
+  function showChallengeLoading(on) {
+    document.getElementById('challenge-loading').style.display = on ? 'block' : 'none';
+    document.getElementById('challenge-box').style.display = 'none';
+    if (on) hideSolutionInput();
+  }
+
+  function revealSolutionInput() {
+    document.getElementById('solution-label').style.display = 'block';
+    document.getElementById('scene-input').style.display = 'block';
+    document.getElementById('scene-controls').style.display = 'flex';
+    document.getElementById('scene-input').focus();
+  }
+
+  function hideSolutionInput() {
+    document.getElementById('solution-label').style.display = 'none';
+    document.getElementById('scene-input').style.display = 'none';
+    document.getElementById('scene-controls').style.display = 'none';
+  }
+
+  function toggleCharQVoice() {
+    if (charQVoiceRec) { stopCharQVoice(); return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return alert('Speech recognition not supported. Use Chrome.');
+    charQVoiceRec = new SR();
+    charQVoiceRec.continuous = false; charQVoiceRec.interimResults = true;
+    charQVoiceRec.onresult = (e) => {
+      document.getElementById('charqs-input').value =
+        Array.from(e.results).map(r => r[0].transcript).join('');
+    };
+    charQVoiceRec.onend = () => { stopCharQVoice(); answerCharQ(); };
+    charQVoiceRec.onerror = () => stopCharQVoice();
+    charQVoiceRec.start();
+    document.getElementById('btn-charqs-mic').textContent = '⏹';
+    document.getElementById('voice-charqs-indicator').textContent = '● listening...';
+  }
+
+  function stopCharQVoice() {
+    charQVoiceRec?.stop(); charQVoiceRec = null;
+    document.getElementById('btn-charqs-mic').textContent = '🎤';
+    document.getElementById('voice-charqs-indicator').textContent = '';
+  }
+
+  // ── Past stories (localStorage) ──────────────────────────────────────────
+  const STORIES_KEY = 'story_builder_shows';
+
+  function saveStoryToHistory(id, name) {
+    const stories = JSON.parse(localStorage.getItem(STORIES_KEY) || '[]');
+    stories.unshift({ showId: id, storyName: name, timestamp: Date.now() });
+    localStorage.setItem(STORIES_KEY, JSON.stringify(stories.slice(0, 10)));
+  }
+
+  function loadPastStories() {
+    const stories = JSON.parse(localStorage.getItem(STORIES_KEY) || '[]');
+    if (!stories.length) return;
+    const section = document.getElementById('past-stories-section');
+    section.style.display = 'block';
+    renderStoryList(stories);
+  }
+
+  function renderStoryList(stories) {
+    const list = document.getElementById('past-stories-list');
+    if (!stories.length) {
+      list.innerHTML = '<p style="color:#aaa;font-size:13px;">No stories yet.</p>';
+      return;
+    }
+    list.innerHTML = stories.map((s, i) => {
+      const date = new Date(s.timestamp).toLocaleDateString();
+      const safeName = (s.storyName || 'Untitled Story').replace(/'/g, "\\'");
+      return `<div class="story-card" id="story-card-${i}">
+        <div style="flex:1;min-width:0;">
+          <strong id="story-name-${i}">${s.storyName || 'Untitled Story'}</strong>
+          <span style="color:#aaa;font-size:11px;margin-left:8px;">${date}</span>
+        </div>
+        <div class="card-actions">
+          <button onclick="revisitStory('${s.showId}', '${safeName}')">▶ Watch</button>
+          <button onclick="exportStory('${s.showId}', '${safeName}')">⬇ Export</button>
+          <button onclick="renameStory(${i})">✏ Rename</button>
+          <button class="btn-danger" onclick="deleteStory('${s.showId}', ${i})">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  async function renameStory(index) {
+    const stories = JSON.parse(localStorage.getItem(STORIES_KEY) || '[]');
+    const s = stories[index];
+    const newName = prompt('New story name:', s.storyName || '');
+    if (!newName || newName === s.storyName) return;
+    stories[index].storyName = newName;
+    localStorage.setItem(STORIES_KEY, JSON.stringify(stories));
+    // Persist to DB
+    fetch(`/api/story/${s.showId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ story_name: newName })
+    }).catch(() => {});
+    renderStoryList(stories);
+  }
+
+  async function deleteStory(showId, index) {
+    if (!confirm('Delete this story? This cannot be undone.')) return;
+    const stories = JSON.parse(localStorage.getItem(STORIES_KEY) || '[]');
+    stories.splice(index, 1);
+    localStorage.setItem(STORIES_KEY, JSON.stringify(stories));
+    // Delete from DB
+    fetch(`/api/story/${showId}`, { method: 'DELETE' }).catch(() => {});
+    if (stories.length) {
+      renderStoryList(stories);
+    } else {
+      document.getElementById('past-stories-section').style.display = 'none';
+    }
+  }
+
+  async function exportStory(showId, storyName) {
+    try {
+      const res = await fetch(`/api/show-bible?show_id=${showId}`);
+      const data = await res.json();
+      if (!data.episodes.length) { alert('No scenes to export yet.'); return; }
+      // Open each video clip in a new tab for download
+      data.episodes.forEach((ep, i) => {
+        const a = document.createElement('a');
+        a.href = ep.veo_clip_url;
+        a.download = `${storyName || 'story'}-scene-${ep.episode_number}.mp4`;
+        a.target = '_blank';
+        document.body.appendChild(a);
+        setTimeout(() => { a.click(); document.body.removeChild(a); }, i * 500);
+      });
+    } catch (err) {
+      alert('Export failed: ' + err.message);
+    }
+  }
+
+  async function revisitStory(id, name) {
+    try {
+      const res = await fetch(`/api/show-bible?show_id=${id}`);
+      const data = await res.json();
+      // Title
+      document.getElementById('revisit-title').innerHTML = `
+        <div style="font-size:2rem;margin-bottom:8px;">🎬</div>
+        <h2 style="font-size:1.6rem;margin:4px 0;">${name || 'Our Story'}</h2>
+        <p style="color:#888;font-size:13px;">${data.episodes.length} scene${data.episodes.length !== 1 ? 's' : ''}</p>`;
+      // Characters
+      document.getElementById('revisit-characters').innerHTML = data.characters.map(c => `
+        <div style="text-align:center;">
+          <img src="${c.styled_frame_url}" style="width:80px;height:80px;object-fit:contain;border-radius:8px;border:2px solid #eee;background:#fafafa;">
+          <div style="font-size:12px;margin-top:4px;color:#555;">${c.name}</div>
+        </div>`).join('');
+      // Scenes
+      document.getElementById('revisit-scenes').innerHTML = data.episodes.map(e => `
+        <div class="scene-card">
+          <h4 style="margin:0 0 8px;">Scene ${e.episode_number}: ${e.title || ''}</h4>
+          <video src="${e.veo_clip_url}" controls style="width:100%;border-radius:4px;"></video>
+        </div>`).join('');
+      show('screen-revisit');
+    } catch (err) {
+      alert('Could not load story: ' + err.message);
+    }
+  }
+
+  // ── Canvas setup ─────────────────────────────────────────────────────────
+  const canvas1 = document.getElementById('draw-canvas');
+  const ctx1 = canvas1.getContext('2d');
+  initCanvas(canvas1, ctx1);
+
+  const canvas2 = document.getElementById('draw-canvas-2');
+  const ctx2 = canvas2.getContext('2d');
+  initCanvas(canvas2, ctx2);
+
+  function initCanvas(canvas, ctx) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    let drawing = false;
+    const brushId = canvas === canvas1 ? 'brush-size' : 'brush-size-2';
+    const pos = (e) => {
+      const r = canvas.getBoundingClientRect();
+      const s = e.touches ? e.touches[0] : e;
+      return { x: (s.clientX - r.left) * (canvas.width / r.width), y: (s.clientY - r.top) * (canvas.height / r.height) };
+    };
+    const down = (e) => { drawing = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); };
+    const move = (e) => {
+      if (!drawing) return;
+      const p = pos(e);
+      ctx.lineWidth = document.getElementById(brushId).value;
+      ctx.lineCap = 'round'; ctx.strokeStyle = '#111';
+      ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault();
+    };
+    const up = () => drawing = false;
+    canvas.addEventListener('mousedown', down); canvas.addEventListener('mousemove', move);
+    canvas.addEventListener('mouseup', up); canvas.addEventListener('mouseleave', up);
+    canvas.addEventListener('touchstart', down, { passive: false });
+    canvas.addEventListener('touchmove', move, { passive: false });
+    canvas.addEventListener('touchend', up);
+  }
+
+  function clearCanvas() { ctx1.fillStyle = '#fff'; ctx1.fillRect(0, 0, canvas1.width, canvas1.height); }
+  function clearCanvas2() { ctx2.fillStyle = '#fff'; ctx2.fillRect(0, 0, canvas2.width, canvas2.height); }
+
+  // ── Screen 2: Submit character ───────────────────────────────────────────
+  async function submitCharacter() {
+    const name = answers.charName || 'Character';
+    // Fire styling in background — don't wait for it.
+    // The character questions take ~20s; styling takes ~5-10s, so it'll be
+    // in the DB well before scene generation starts.
+    addCharacter(name, canvas1, 'btn-add-char', 'char-status', 'styled-img', 'char-description')
+      .catch(e => console.warn('Character styling failed:', e));
+    startCharQuestions(name);
+  }
+
+  function skipCharacter() { startCharQuestions(answers.charName || 'Character'); }
+
+  // ── Parental approval ────────────────────────────────────────────────────
+  let pendingApproval = null;
+
+  function approveContent() {
+    document.getElementById('approval-overlay').style.display = 'none';
+    if (pendingApproval) { pendingApproval(true); pendingApproval = null; }
+  }
+
+  function denyContent() {
+    document.getElementById('approval-overlay').style.display = 'none';
+    const btn = document.getElementById('btn-generate');
+    const status = document.getElementById('scene-status');
+    document.getElementById('loading-draw-area').style.display = 'none';
+    btn.disabled = false;
+    status.textContent = 'Please try a different idea.';
+    narrate('Please try a different idea for the story.');
+    pendingApproval = null;
+  }
+
+  // ── Screen 3: Generate scene ─────────────────────────────────────────────
+  // ── Voice moment ──────────────────────────────────────────────────────────
+  let pendingVoiceResolve = null;
+  let voiceMomentRec = null;
+  let capturedVoiceResponse = null;
+
+  function showVoiceMoment(promptText) {
+    return new Promise((resolve) => {
+      pendingVoiceResolve = resolve;
+      document.getElementById('voice-moment-text').textContent = promptText;
+      document.getElementById('voice-moment-status').textContent = '';
+      document.getElementById('voice-moment-response').textContent = '';
+      document.getElementById('btn-voice-moment').textContent = '🎤';
+      document.getElementById('voice-moment').style.display = 'block';
+      narrate(promptText);
+    });
+  }
+
+  function startVoiceMoment() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { skipVoiceMoment(); return; }
+    const r = new SR();
+    r.continuous = false; r.interimResults = false;
+    voiceMomentRec = r;
+    document.getElementById('btn-voice-moment').textContent = '⏹';
+    document.getElementById('voice-moment-status').textContent = '● listening...';
+    r.onresult = (e) => {
+      const text = e.results[0][0].transcript;
+      document.getElementById('voice-moment-response').textContent = `"${text}"`;
+      document.getElementById('voice-moment-status').textContent = '✓ Got it!';
+      voiceMomentRec = null;
+      setTimeout(() => { if (pendingVoiceResolve) { pendingVoiceResolve(text); pendingVoiceResolve = null; } }, 800);
+    };
+    r.onerror = () => skipVoiceMoment();
+    r.onend = () => { document.getElementById('btn-voice-moment').textContent = '🎤'; };
+    r.start();
+  }
+
+  function skipVoiceMoment() {
+    voiceMomentRec?.stop(); voiceMomentRec = null;
+    if (pendingVoiceResolve) { pendingVoiceResolve(null); pendingVoiceResolve = null; }
+  }
+
+  async function generateScene(parent_approved = false) {
+    const solution = document.getElementById('scene-input').value.trim();
+    if (!solution) return alert('What does your character do?');
+    const btn = document.getElementById('btn-generate');
+    const status = document.getElementById('scene-status');
+    btn.disabled = true;
+    fadeOutLyria();
+    document.getElementById('scene-result').style.display = 'none';
+    status.innerHTML = `<span class="loader"></span>Preparing...`;
+
+    capturedVoiceResponse = null;
+
+    // Start job immediately — generate-scene returns a job_id instantly
+    const startRes = await fetch('/api/generate-scene', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        show_id: showId, scene_number: currentScene, solution,
+        challenge_text: currentChallenge?.challenge_text || '',
+        story_name: answers.storyName,
+        parent_approved, character_traits: characterTraits
+      })
+    });
+    const { job_id, error: startErr } = await startRes.json();
+    if (startErr) throw new Error(startErr);
+
+    // Start polling immediately — status display updates live from here
+    const resultPromise = pollSceneJob(job_id, status);
+
+    // Fetch voice prompt with a hard 8s timeout, then show voice moment
+    // with a 25s auto-skip — so Veo is ALWAYS unblocked no matter what.
+    try {
+      const vpAbort = new AbortController();
+      const vpTimer = setTimeout(() => vpAbort.abort(), 8000);
+      const vpRes = await fetch('/api/scene-voice-prompt', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ show_id: showId, user_input: solution }),
+        signal: vpAbort.signal
+      });
+      clearTimeout(vpTimer);
+      const vpData = await vpRes.json();
+      if (vpData.voice_prompt) {
+        // Race: child responds OR 25s passes — either way we move on
+        capturedVoiceResponse = await Promise.race([
+          showVoiceMoment(vpData.voice_prompt),
+          new Promise(r => setTimeout(() => r(null), 25000))
+        ]);
+      }
+    } catch (_) {}
+
+    // Always deliver voice response — unblocks Veo whether child responded or not
+    fetch(`/api/scene-voice-response/${job_id}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voice_response: capturedVoiceResponse })
+    }).catch(() => {});
+
+    document.getElementById('voice-moment').style.display = 'none';
+    hideSolutionInput();
+    document.getElementById('challenge-box').style.display = 'none';
+    document.getElementById('loading-draw-area').style.display = 'block';
+
+    try {
+      // Await the already-running poll
+      const data = await resultPromise;
+
+      if (data.needs_approval) {
+        document.getElementById('loading-draw-area').style.display = 'none';
+        status.textContent = '⏸ Waiting for parent approval...';
+        document.getElementById('approval-reason').textContent = `Reason: ${data.reason}`;
+        document.getElementById('approval-overlay').style.display = 'flex';
+        narrate('A parent needs to check this before we continue.');
+        pendingApproval = (approved) => { if (approved) generateScene(true); };
+        btn.disabled = false;
+        revealSolutionInput();
+        return;
+      }
+
+      scenes.push(data);
+      document.getElementById('loading-draw-area').style.display = 'none';
+      document.getElementById('scene-title').textContent = data.episode_title;
+      syncAudioToVideo(data.video_url, data.audio_url);
+      document.getElementById('scene-result').style.display = 'block';
+      status.textContent = `✓ Scene ${currentScene} ready!`;
+
+      if (currentScene < TOTAL_SCENES) {
+        currentScene++;
+        document.getElementById('scene-heading').textContent = `Scene ${currentScene} of ${TOTAL_SCENES}`;
+        document.getElementById('btn-generate').textContent = `Generate Scene ${currentScene}`;
+        document.getElementById('scene-input').value = '';
+        if (data.next_challenge) {
+          displayChallenge(data.next_challenge);
+        } else {
+          revealSolutionInput();
+        }
+        btn.disabled = false;
+      } else {
+        status.textContent = '✓ All scenes done!';
+        showNamingScreen(data.closing_line);
+      }
+    } catch (e) {
+      status.className = 'status error';
+      status.textContent = `Error: ${e.message}`;
+      document.getElementById('loading-draw-area').style.display = 'none';
+      revealSolutionInput();
+      btn.disabled = false;
+    }
+  }
+
+  // ── Job progress polling ─────────────────────────────────────────────────
+  const STEP_LABELS = {
+    queued:             '⏳ Starting...',
+    moderation:         '🔍 Checking story content...',
+    loading_context:    '📖 Loading story context...',
+    building_prompts:   '✍️  Writing scene script...',
+    lyria_starting:     '🎵 Starting music generation...',
+    awaiting_voice:     '✅ Script ready — do the voice moment!',
+    starting_veo:       '🎬 Starting Veo video generation...',
+    lyria_done:         '🎵 Music ready, animating...',
+    veo_queued:         '🎬 Veo job submitted...',
+    veo_polling:        '🎬 Animating...',
+    veo_done:           '✅ Video done, saving...',
+    saving:             '💾 Saving files...',
+    saving_db:          '🗄️  Saving to database...',
+    next_challenge:     '🎲 Generating next challenge...',
+  };
+
+  function fmtElapsed(ms) {
+    if (ms < 1000) return `${ms}ms`;
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+
+  async function pollSceneJob(jobId, statusEl) {
+    return new Promise((resolve, reject) => {
+      const poll = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/scene-progress/${jobId}`);
+          const job = await res.json();
+
+          if (job.status === 'running') {
+            const label = STEP_LABELS[job.step] || job.label || job.step;
+            const pollInfo = job.veo_poll > 0 ? ` (poll #${job.veo_poll})` : '';
+            statusEl.innerHTML = `<span class="loader"></span>${label}${pollInfo} <span style="color:#aaa;font-size:11px;">${fmtElapsed(job.elapsed_ms)}</span>`;
+          } else if (job.status === 'needs_approval') {
+            clearInterval(poll);
+            resolve({ needs_approval: true, reason: job.reason });
+          } else if (job.status === 'done') {
+            clearInterval(poll);
+            statusEl.innerHTML = `✓ Done in ${fmtElapsed(job.elapsed_ms)}`;
+            resolve(job.result);
+          } else if (job.status === 'error') {
+            clearInterval(poll);
+            reject(new Error(job.error));
+          }
+        } catch (e) { clearInterval(poll); reject(e); }
+      }, 2000);
+
+      // Hard 10-minute client-side timeout — never hang forever
+      setTimeout(() => {
+        clearInterval(poll);
+        reject(new Error('Timed out after 10 minutes. The server may be busy — please try again.'));
+      }, 10 * 60 * 1000);
+    });
+  }
+
+  // ── Loading-time draw ────────────────────────────────────────────────────
+  async function submitLoadingCharacter() {
+    const name = document.getElementById('loading-char-name').value.trim();
+    if (!name) return alert('Name your character/object');
+    await addCharacter(name, canvas2, 'btn-add-loading', 'loading-char-status', 'styled-img-2', null);
+    document.getElementById('loading-char-status').textContent = `✓ ${name} will appear in the next scene!`;
+  }
+
+  // ── Shared character add ─────────────────────────────────────────────────
+  async function addCharacter(name, canvas, btnId, statusId, imgId, descId) {
+    const btn = document.getElementById(btnId);
+    const status = document.getElementById(statusId);
+    btn.disabled = true;
+    status.innerHTML = '<span class="loader"></span>Styling your drawing...';
+    try {
+      const res = await fetch('/api/add-character', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ show_id: showId, name, image_data: canvas.toDataURL('image/png') })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      characters.push({ name, styled_frame_url: data.styled_frame_url });
+      const img = document.getElementById(imgId);
+      img.src = data.styled_frame_url;
+      img.style.display = 'block';
+      if (descId) document.getElementById(descId).textContent = `"${data.description}"`;
+      status.textContent = `✓ ${name} added!`;
+      btn.textContent = 'Add Another';
+      btn.disabled = false;
+    } catch (e) {
+      status.className = 'status error';
+      status.textContent = `Error: ${e.message}`;
+      btn.disabled = false;
+    }
+  }
+
+  // ── Story naming screen ──────────────────────────────────────────────────
+  function showNamingScreen(closingLine) {
+    pendingClosingLine = closingLine;
+    document.getElementById('story-name-input').value = '';
+    document.getElementById('voice-name-indicator').textContent = '';
+    document.getElementById('btn-name-mic').textContent = '🎤';
+    show('screen-name-story');
+    narrate("You did it! Your story is complete. What would you like to call it?");
+  }
+
+  function submitStoryName() {
+    const name = document.getElementById('story-name-input').value.trim() || `${answers.charName}'s Story`;
+    stopNameVoice();
+    answers.storyName = name;
+    saveStoryToHistory(showId, name);
+    // Update DB with the name
+    fetch(`/api/story/${showId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ story_name: name })
+    }).catch(() => {});
+    showFinale(pendingClosingLine);
+  }
+
+  function toggleNameVoice() {
+    if (nameVoiceRec) { stopNameVoice(); return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    nameVoiceRec = new SR();
+    nameVoiceRec.continuous = false; nameVoiceRec.interimResults = true;
+    nameVoiceRec.onresult = (e) => {
+      document.getElementById('story-name-input').value =
+        Array.from(e.results).map(r => r[0].transcript).join('');
+    };
+    nameVoiceRec.onend = () => { stopNameVoice(); submitStoryName(); };
+    nameVoiceRec.onerror = () => stopNameVoice();
+    nameVoiceRec.start();
+    document.getElementById('btn-name-mic').textContent = '⏹';
+    document.getElementById('voice-name-indicator').textContent = '● listening...';
+  }
+
+  function stopNameVoice() {
+    nameVoiceRec?.stop(); nameVoiceRec = null;
+    document.getElementById('btn-name-mic').textContent = '🎤';
+    document.getElementById('voice-name-indicator').textContent = '';
+  }
+
+  // ── Finale ───────────────────────────────────────────────────────────────
+  function showFinale(closingLine) {
+    // Title
+    document.getElementById('finale-title').innerHTML = `
+      <div class="fade-in" style="animation-delay:0.1s">
+        <div style="font-size:2rem;">🎬</div>
+        <h2 style="font-size:1.6rem;margin:8px 0;">${answers.storyName || 'Our Story'}</h2>
+        <p style="color:#888;font-size:13px;">A story in 3 scenes</p>
+      </div>`;
+
+    // Characters
+    if (characters.length) {
+      document.getElementById('finale-characters').innerHTML = characters.map((c, i) => `
+        <div class="fade-in" style="animation-delay:${0.2 + i * 0.15}s;text-align:center;">
+          <img src="${c.styled_frame_url}" style="width:90px;height:90px;object-fit:contain;border-radius:8px;border:2px solid #eee;background:#fafafa;">
+          <div style="font-size:12px;margin-top:4px;color:#555;">${c.name}</div>
+        </div>`).join('');
+    }
+
+    // Scene cards revealed one by one
+    const container = document.getElementById('all-scenes');
+    container.innerHTML = '';
+    scenes.forEach((s, i) => {
+      const card = document.createElement('div');
+      card.className = 'scene-card fade-in';
+      card.style.animationDelay = `${0.5 + i * 0.4}s`;
+      card.innerHTML = `
+        <h4 style="margin:0 0 8px;">Scene ${i + 1}: ${s.episode_title}</h4>
+        <video src="${s.video_url}" controls style="width:100%;border-radius:4px;"></video>`;
+      container.appendChild(card);
+    });
+
+    show('screen-finale');
+
+    // Narrate closing line after animations settle
+    if (closingLine) {
+      setTimeout(() => narrate(closingLine), 1200);
+    }
+  }
+
+  // ── Voice input (Web Speech API) ─────────────────────────────────────────
+  let recognition = null;
+  function toggleVoice() {
+    const btn = document.getElementById('btn-voice');
+    const indicator = document.getElementById('voice-indicator');
+    if (recognition) {
+      recognition.stop(); recognition = null;
+      btn.textContent = '🎤 Voice'; indicator.textContent = '';
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return alert('Speech recognition not supported in this browser. Use Chrome.');
+    recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (e) => {
+      document.getElementById('scene-input').value =
+        Array.from(e.results).map(r => r[0].transcript).join('');
+    };
+    recognition.onend = () => { btn.textContent = '🎤 Voice'; indicator.textContent = ''; recognition = null; };
+    recognition.onerror = (e) => { indicator.textContent = `Error: ${e.error}`; };
+    recognition.start();
+    btn.textContent = '⏹ Stop';
+    indicator.textContent = '● recording';
+  }
+
+  // ── Video + Lyria audio sync ─────────────────────────────────────────────
+  let currentLyriaAudio = null;
+
+  function syncAudioToVideo(videoUrl, audioUrl) {
+    const video = document.getElementById('scene-video');
+    const audio = document.getElementById('scene-audio');
+    const newVideo = video.cloneNode(false);
+    const newAudio = audio.cloneNode(false);
+    video.replaceWith(newVideo); audio.replaceWith(newAudio);
+    newVideo.src = videoUrl;
+    newAudio.src = audioUrl;
+    newAudio.loop = true;
+    currentLyriaAudio = newAudio;
+    newVideo.addEventListener('play', () => { newAudio.currentTime = newVideo.currentTime % newAudio.duration || 0; newAudio.play(); });
+    newVideo.addEventListener('pause', () => { if (!newVideo.ended) newAudio.pause(); });
+    newVideo.addEventListener('seeked', () => { newAudio.currentTime = newVideo.currentTime % newAudio.duration || 0; });
+  }
+
+  function stopLyria() {
+    if (currentLyriaAudio) { currentLyriaAudio.pause(); currentLyriaAudio.loop = false; }
+  }
+
+  function fadeOutLyria(durationMs = 1500) {
+    if (!currentLyriaAudio) return;
+    const audio = currentLyriaAudio;
+    const startVol = audio.volume;
+    const steps = 30;
+    const interval = durationMs / steps;
+    let step = 0;
+    const fade = setInterval(() => {
+      step++;
+      audio.volume = Math.max(0, startVol * (1 - step / steps));
+      if (step >= steps) {
+        clearInterval(fade);
+        audio.pause();
+        audio.loop = false;
+        audio.volume = 1;
+      }
+    }, interval);
+  }
+
+  // ── Narrator (Gemini TTS) ────────────────────────────────────────────────
+  let narratorAudio = null;
+  async function narrate(text) {
+    try {
+      if (narratorAudio) { narratorAudio.pause(); narratorAudio = null; }
+      const res = await fetch('/api/narrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      narratorAudio = new Audio(URL.createObjectURL(blob));
+      narratorAudio.play();
+    } catch (_) {}
+  }
+
+  // ── Utility ──────────────────────────────────────────────────────────────
+  function show(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    window.scrollTo(0, 0);
+  }
+</script>
+</body>
+</html>

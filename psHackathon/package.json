@@ -1,0 +1,31 @@
+{
+  "name": "pshackathon",
+  "version": "1.0.0",
+  "description": "",
+  "main": "db.js",
+  "scripts": {
+    "start": "node --dns-result-order=ipv4first server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samuelbingham07/psHackathon.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/samuelbingham07/psHackathon/issues"
+  },
+  "homepage": "https://github.com/samuelbingham07/psHackathon#readme",
+  "dependencies": {
+    "@google/genai": "^1.46.0",
+    "@neondatabase/serverless": "^1.0.2",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "replicate": "^1.4.0",
+    "ws": "^8.20.0"
+  }
+}
